@@ -1,6 +1,11 @@
-import torch
 from torch.autograd import Function
 import torch.nn as nn
+
+def create_model(args):
+    if args.model == 'DANN':
+        return DANN(310, args.hidden_dim, 3, 2, args.lamda)
+    elif args.model == 'MLP':
+        return MLP(310, args.hidden_dim, 3)
 
 class ReverseLayerF(Function):
     @staticmethod
@@ -30,19 +35,19 @@ class DANN(nn.Module):
         )
 
         self.label_classifier = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim/2),
+            nn.Linear(hidden_dim, hidden_dim//2),
             nn.ReLU(),
-            nn.Linear(hidden_dim/2, hidden_dim/2),
+            nn.Linear(hidden_dim//2, hidden_dim//2),
             nn.ReLU(),
-            nn.Linear(hidden_dim/2, num_labels)
+            nn.Linear(hidden_dim//2, num_labels)
         )
 
         self.domain_classifier = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim/2),
+            nn.Linear(hidden_dim, hidden_dim//2),
             nn.ReLU(),
-            nn.Linear(hidden_dim/2, hidden_dim/2),
+            nn.Linear(hidden_dim//2, hidden_dim//2),
             nn.ReLU(),
-            nn.Linear(64, num_domains)
+            nn.Linear(hidden_dim//2, num_domains)
         )
 
     def forward(self, input_data):
@@ -67,11 +72,11 @@ class MLP(nn.Module):
         )
 
         self.label_classifier = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim / 2),
+            nn.Linear(hidden_dim, hidden_dim//2),
             nn.ReLU(),
-            nn.Linear(hidden_dim / 2, hidden_dim / 2),
+            nn.Linear(hidden_dim//2, hidden_dim//2),
             nn.ReLU(),
-            nn.Linear(hidden_dim / 2, num_labels)
+            nn.Linear(hidden_dim//2, num_labels)
         )
 
     def forward(self, input_data):

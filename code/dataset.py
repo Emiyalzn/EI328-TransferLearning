@@ -34,10 +34,10 @@ class SeedDataset(Dataset):
             self.y = self.y_total[idx]
 
         self.x = np.array(self.x)
-        self.y = np.array(self.y)
+        self.y = np.squeeze(np.array(self.y))
 
     def __getitem__(self, index):
-        return self.x[index], self.y[index] + 1
+        return self.x[index], self.y[index]+1
 
     def __len__(self):
         return len(self.x)
