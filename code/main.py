@@ -38,7 +38,7 @@ def train_DANN(args, train_dataset, test_datastet):
         test_loader = DataLoader(dataset=test_datastet, batch_size=args.batch_size, shuffle=True)
 
         model = create_model(args).to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
         test_iter = iter(test_loader)
         best_acc = 0.
@@ -95,7 +95,7 @@ def train_generalization(args, train_dataset, test_dataset):
         train_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True)
 
         model = create_model(args).to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr = args.lr)
+        optimizer = torch.optim.Adam(model.parameters(), lr = args.lr, weight_decay=args.weight_decay)
 
         best_acc = 0.
         for epoch in range(args.num_epoch):
@@ -142,7 +142,7 @@ if __name__ == '__main__':
         train_DANN(args, train_dataset, test_dataset)
     elif args.model == 'ADDA' or args.model == 'WGANDA':
         train_adaptation(args, train_dataset, test_dataset)
-    elif args.model == 'MLP' or args.model == 'IRM' or args.model == 'REx':
+    elif args.model == 'MLP' or args.model == 'ResNet' or args.model == 'IRM' or args.model == 'REx':
         train_generalization(args, train_dataset, test_dataset)
     else:
         raise ValueError("Unknown model type!")

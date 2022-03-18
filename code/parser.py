@@ -12,4 +12,6 @@ def parse_arguments():
     parser.add_argument("--num_epoch", type=int, default=300)
     parser.add_argument("--display_epoch", type=int, default=1)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--penalty_weight", type=float, default=.5)
+    parser.add_argument("--weight_decay", type=float, default=.0)
     return parser.parse_args()
