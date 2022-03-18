@@ -1,6 +1,7 @@
 import torch
 from torch.utils.data import DataLoader
 import numpy as np
+import os
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
@@ -10,6 +11,7 @@ from models import create_model
 from parser import parse_arguments
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+checkpoint_dir = "../checkpoint"
 
 def train_svm(args, train_dataset, test_dataset):
     validation_accs = np.zeros(15)
@@ -74,6 +76,8 @@ def train_DANN(args, train_dataset, test_datastet):
                 test_acc = (test_y_pred == test_y + 1).sum().item() / len(test_dataset)
                 if test_acc > best_acc:
                     best_acc = test_acc
+                    filename = f"{args.model}_checkpoint.pt"
+                    torch.save(model.state_dict(), os.path.join(checkpoint_dir, filename))
                 print(f"Epoch {epoch}, Class Loss {total_class_loss / len(train_loader):.4f}, Domain Loss {total_domain_loss / len(train_loader):.4f}, Acc {test_acc:.4f}")
         validation_accs[idx] = best_acc
         print(f"Fold {idx} best acc: {validation_accs[idx]:.4f}")
@@ -114,6 +118,8 @@ def train_generalization(args, train_dataset, test_dataset):
                 test_acc = (test_y_pred == test_y + 1).sum().item()/len(test_dataset)
                 if test_acc > best_acc:
                     best_acc = test_acc
+                    filename = f"{args.model}_checkpoint.pt"
+                    torch.save(model.state_dict(), os.path.join(checkpoint_dir, filename))
                 print(f"Epoch {epoch}, Loss {total_loss / len(train_loader):.4f}, Acc {test_acc:.4f}")
         validation_accs[idx] = best_acc
         print(f"Fold {idx} best acc: {validation_accs[idx]:.4f}")

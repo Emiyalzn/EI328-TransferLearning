@@ -1,17 +1,22 @@
 import torch
+import os
 from torch.utils.data import DataLoader
 import torch.autograd as autograd
+import torch.nn.functional as F
 import numpy as np
 from parser import parse_arguments
 from models import create_model
 from dataset import SeedDataset, DATASET_PATH
+import scipy.io as sio
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
+checkpoint_dir = "../checkpoint"
+confidence_threshold = .8
 
 def calc_gradient_penalty(netD, real_data, fake_data):
     batch_size = real_data.size(0)
     alpha = torch.rand(batch_size, 1).to(real_data.device)
+    alpha = alpha.expand(real_data.size())
     interpolates = alpha * real_data + (1 - alpha) * fake_data
     interpolates = autograd.Variable(interpolates, requires_grad=True)
 
@@ -27,6 +32,14 @@ def calc_gradient_penalty(netD, real_data, fake_data):
 def wGAN_augmentation(args, dataset):
     wGAN = create_model(args)
     wGAN.netD, wGAN.netG = wGAN.netD.to(device), wGAN.netG.to(device)
+
+    # load classifier
+    args.model = 'ResNet'
+    resnet =  create_model(args).to(device)
+    resnet_state_dict = torch.load(os.path.join(checkpoint_dir, 'ResNet_checkpoint.pt'))
+    resnet.load_state_dict(resnet_state_dict)
+    resnet.eval()
+
     dataloader = DataLoader(dataset=dataset, batch_size=args.batch_size, shuffle=True)
     data_iter = iter(dataloader)
 
@@ -35,6 +48,10 @@ def wGAN_augmentation(args, dataset):
 
     one = torch.tensor(1, dtype=torch.float)
     mone = one * -1
+
+    flag = 0
+    auxiliary_X = None
+    auxiliary_Y = None
 
     for iteration in range(args.gen_iters):
         for p in wGAN.netD.parameters():
@@ -83,19 +100,35 @@ def wGAN_augmentation(args, dataset):
         G_cost = -G
         optimizerG.step()
 
+        # measure confidence
+        class_logits = resnet(fake)
+        class_prob, class_label = torch.max(F.softmax(class_logits, dim=1), dim=1)
+        # print(class_label)
+
+        # record those generated data with high confidence
+        generate_X = fake[class_prob > confidence_threshold].detach().cpu().numpy()
+        generate_Y = class_label[class_prob > confidence_threshold].detach().cpu().numpy() - 1
+
+        if generate_Y.shape[0] > 0:
+            if flag == 0:
+                flag = 1
+                auxiliary_X = generate_X
+                auxiliary_Y = generate_Y
+            else:
+                auxiliary_X = np.concatenate((auxiliary_X, generate_X), axis=0)
+                auxiliary_Y = np.concatenate((auxiliary_Y, generate_Y), axis=0)
+            # early stop with enough data
+            if auxiliary_Y.shape[0] > 2000:
+                break
+
         print(f"Iteration {iteration}, D loss: {D_cost:.4f}, G loss: {G_cost:.4f}")
 
+    sio.savemat(os.path.join(DATASET_PATH, f"auxiliary_data_label{auxiliary_Y[0]}.mat"), {'X': auxiliary_X, 'Y': auxiliary_Y})
 
 if __name__ == '__main__':
     dataset = SeedDataset(True)
     dataset.prepare_gen()
 
     args = parse_arguments()
-    if args.seed != None:
-        torch.manual_seed(args.seed)
-        torch.cuda.manual_seed_all(args.seed)
-        np.random.seed(args.seed)
-        torch.backends.cudnn.deterministic = True
-
     wGAN_augmentation(args, dataset)
 
