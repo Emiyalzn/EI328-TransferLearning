@@ -7,6 +7,40 @@ def create_model(args):
     elif args.model == 'MLP':
         return MLP(310, args.hidden_dim, 3)
 
+class MLP(nn.Module):
+    def __init__(self, input_dim, hidden_dim, num_labels):
+        super(MLP, self).__init__()
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.num_labels = num_labels
+        self.criterion = nn.CrossEntropyLoss()
+
+        self.feature_extractor = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU()
+        )
+
+        self.label_classifier = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim//2),
+            nn.ReLU(),
+            nn.Linear(hidden_dim//2, hidden_dim//2),
+            nn.ReLU(),
+            nn.Linear(hidden_dim//2, num_labels)
+        )
+
+    def forward(self, input_data):
+        feature_mapping = self.feature_extractor(input_data)
+        class_output = self.label_classifier(feature_mapping)
+        return class_output
+
+    def compute_loss(self, data):
+        x, y = data
+        class_output = self.forward(x)
+        loss = self.criterion(class_output, y)
+        return loss
+
 class ReverseLayerF(Function):
     @staticmethod
     def forward(ctx, x, lamda):
@@ -71,36 +105,8 @@ class DANN(nn.Module):
         domain_loss = domain_source_loss + domain_target_loss
         return class_loss, domain_loss
 
-class MLP(nn.Module):
-    def __init__(self, input_dim, hidden_dim, num_labels):
-        super(MLP, self).__init__()
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
-        self.num_labels = num_labels
-        self.criterion = nn.CrossEntropyLoss()
+class ADDA(nn.Module):
+    pass
 
-        self.feature_extractor = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU()
-        )
-
-        self.label_classifier = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim//2),
-            nn.ReLU(),
-            nn.Linear(hidden_dim//2, hidden_dim//2),
-            nn.ReLU(),
-            nn.Linear(hidden_dim//2, num_labels)
-        )
-
-    def forward(self, input_data):
-        feature_mapping = self.feature_extractor(input_data)
-        class_output = self.label_classifier(feature_mapping)
-        return class_output
-
-    def compute_loss(self, data):
-        x, y = data
-        class_output = self.forward(x)
-        loss = self.criterion(class_output, y)
-        return loss
+class WGANDA(nn.Module):
+    pass

@@ -27,7 +27,7 @@ def train_svm(args, train_dataset, test_dataset):
     acc_std = np.std(validation_accs)
     print(f"Average acc is: {acc_mean:.4f}±{acc_std:.4f}")
 
-def train_adaptation(args, train_dataset, test_datastet):
+def train_DANN(args, train_dataset, test_datastet):
     validation_accs = np.zeros(15)
     for idx in range(15):
         train_dataset.prepare_dataset(idx)
@@ -82,6 +82,8 @@ def train_adaptation(args, train_dataset, test_datastet):
     acc_std = np.std(validation_accs)
     print(f"Average acc is: {acc_mean:.4f}±{acc_std:.4f}")
 
+def train_adaptation(args, train_dataset, test_dataset):
+    pass
 
 def train_generalization(args, train_dataset, test_dataset):
     validation_accs = np.zeros(15)
@@ -136,7 +138,9 @@ if __name__ == '__main__':
 
     if args.model == 'svm':
         train_svm(args, train_dataset, test_dataset)
-    elif args.model == 'DANN' or args.model == 'ADDA' or args.model == 'WGANDA':
+    elif args.model == 'DANN':
+        train_DANN(args, train_dataset, test_dataset)
+    elif args.model == 'ADDA' or args.model == 'WGANDA':
         train_adaptation(args, train_dataset, test_dataset)
     elif args.model == 'MLP' or args.model == 'IRM' or args.model == 'REx':
         train_generalization(args, train_dataset, test_dataset)
