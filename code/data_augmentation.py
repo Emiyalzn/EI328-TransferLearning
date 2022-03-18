@@ -11,7 +11,6 @@ import scipy.io as sio
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 checkpoint_dir = "../checkpoint"
-confidence_threshold = .8
 
 def calc_gradient_penalty(netD, real_data, fake_data):
     batch_size = real_data.size(0)
@@ -103,11 +102,10 @@ def wGAN_augmentation(args, dataset):
         # measure confidence
         class_logits = resnet(fake)
         class_prob, class_label = torch.max(F.softmax(class_logits, dim=1), dim=1)
-        # print(class_label)
 
         # record those generated data with high confidence
-        generate_X = fake[class_prob > confidence_threshold].detach().cpu().numpy()
-        generate_Y = class_label[class_prob > confidence_threshold].detach().cpu().numpy() - 1
+        generate_X = fake[class_prob > .8].detach().cpu().numpy()
+        generate_Y = class_label[class_prob > .8].detach().cpu().numpy() - 1
 
         if generate_Y.shape[0] > 0:
             if flag == 0:
@@ -118,12 +116,12 @@ def wGAN_augmentation(args, dataset):
                 auxiliary_X = np.concatenate((auxiliary_X, generate_X), axis=0)
                 auxiliary_Y = np.concatenate((auxiliary_Y, generate_Y), axis=0)
             # early stop with enough data
-            if auxiliary_Y.shape[0] > 2000:
+            if auxiliary_Y.shape[0] > 3000:
                 break
 
         print(f"Iteration {iteration}, D loss: {D_cost:.4f}, G loss: {G_cost:.4f}")
 
-    sio.savemat(os.path.join(DATASET_PATH, f"auxiliary_data_label{auxiliary_Y[0]}.mat"), {'X': auxiliary_X, 'Y': auxiliary_Y})
+    sio.savemat(os.path.join(DATASET_PATH, f"auxiliary_data_label_{auxiliary_Y[1000]}.mat"), {'X': auxiliary_X, 'Y': auxiliary_Y})
 
 if __name__ == '__main__':
     dataset = SeedDataset(True)

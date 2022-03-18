@@ -19,5 +19,6 @@ def parse_arguments():
     parser.add_argument("--wgan_lamda", type=float, default=10.)
     parser.add_argument("--critic_iters", type=int, default=10)
     parser.add_argument("--gen_iters", type=int, default=10000)
+    parser.add_argument("--is_augmentation", action='store_true')
 
     return parser.parse_args()

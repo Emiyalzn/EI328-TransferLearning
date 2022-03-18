@@ -129,10 +129,9 @@ def train_generalization(args, train_dataset, test_dataset):
 
 
 if __name__ == '__main__':
-    train_dataset = SeedDataset(True)
-    test_dataset = SeedDataset(False)
-
     args = parse_arguments()
+    train_dataset = SeedDataset(True, args.is_augmentation)
+    test_dataset = SeedDataset(False, args.is_augmentation)
 
     # fix random seed for reproducibility
     if args.seed != None:
