@@ -14,4 +14,5 @@ def parse_arguments():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--penalty_weight", type=float, default=.5)
     parser.add_argument("--weight_decay", type=float, default=.0)
+    parser.add_argument("--variance_weight", type=float, default=.5)
     return parser.parse_args()

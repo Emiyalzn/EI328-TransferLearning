@@ -14,7 +14,7 @@ def create_model(args):
     elif args.model == 'IRM':
         return IRM(310, args.hidden_dim, 3, args.penalty_weight)
     elif args.model == 'REx':
-        return REx(310, args.hidden_dim, 3)
+        return REx(310, args.hidden_dim, 3, args.variance_weight)
 
 class MLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_labels):
@@ -193,12 +193,13 @@ class IRM(nn.Module):
         return loss + self.penalty_weight * penalty
 
 class REx(nn.Module):
-    def __init__(self, input_dim, hidden_dim, num_labels):
+    def __init__(self, input_dim, hidden_dim, num_labels, variance_weight):
         super(REx, self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.num_labels = num_labels
-        self.criterion = nn.CrossEntropyLoss()
+        self.variance_weight = variance_weight
+        self.criterion = nn.CrossEntropyLoss(reduction='none')
 
         self.feature_extractor = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
@@ -214,3 +215,19 @@ class REx(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_dim//2, num_labels)
         )
+
+    def forward(self, input_data):
+        feature_mapping = self.feature_extractor(input_data)
+        class_output = self.label_classifier(feature_mapping)
+        return class_output
+
+    def compute_loss(self, data):
+        x, y = data
+        class_output = self.forward(x)
+        loss = self.criterion(class_output, y)
+        loss_mean = torch.mean(loss)
+        loss_var = torch.var(loss)
+        return loss_mean + self.variance_weight * loss_var
+
+
+
