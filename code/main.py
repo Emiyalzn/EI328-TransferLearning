@@ -28,7 +28,7 @@ def train_svm(args, train_dataset, test_dataset):
     print(f"Average acc is: {acc_mean:.4f}±{acc_std:.4f}")
 
 def train_adaptation(args, train_dataset, test_datastet):
-    criterion = nn.CrossEntropyLoss()
+    validation_accs = np.zeros(15)
     for idx in range(15):
         train_dataset.prepare_dataset(idx)
         test_dataset.prepare_dataset(idx)
@@ -41,6 +41,7 @@ def train_adaptation(args, train_dataset, test_datastet):
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
         test_iter = iter(test_loader)
+        best_acc = 0.
         for epoch in range(args.num_epoch):
             model.train()
             total_class_loss = 0.
@@ -48,11 +49,7 @@ def train_adaptation(args, train_dataset, test_datastet):
             for i, data in enumerate(train_loader):
                 inputs, class_labels = data
                 domain_source_labels = torch.zeros(len(inputs)).long()
-                inputs, class_labels, domain_source_labels = inputs.to(device), class_labels.to(device), domain_source_labels.to(device)
-
-                pred_class_label, pred_domain_label = model(inputs.float())
-                class_loss = criterion(pred_class_label, class_labels)
-                source_domain_loss = criterion(pred_domain_label, domain_source_labels)
+                train_data = inputs.to(device).float(), class_labels.to(device), domain_source_labels.to(device)
 
                 try:
                     inputs, _ = next(test_iter)
@@ -61,28 +58,33 @@ def train_adaptation(args, train_dataset, test_datastet):
                     inputs, _ = next(test_iter)
 
                 domain_target_labels = torch.ones(len(inputs)).long()
-                inputs, domain_target_labels = inputs.to(device), domain_target_labels.to(device)
+                test_data = inputs.to(device).float(), domain_target_labels.to(device)
 
-                _, pred_domain_label = model(inputs.float())
-                target_domain_loss = criterion(pred_domain_label, domain_target_labels)
-
-                loss = class_loss + source_domain_loss + target_domain_loss
+                class_loss, domain_loss = model.compute_loss(train_data, test_data)
+                loss = class_loss + domain_loss
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
 
                 total_class_loss += class_loss.detach().cpu().numpy()
-                total_domain_loss += source_domain_loss.detach().cpu().numpy() + target_domain_loss.detach().cpu().numpy()
+                total_domain_loss += domain_loss.detach().cpu().numpy()
             if epoch % args.display_epoch == 0:
                 model.eval()
                 pred_class_label, _ = model(test_x.float())
                 _, test_y_pred = torch.max(pred_class_label, dim=1)
                 test_acc = (test_y_pred == test_y + 1).sum().item() / len(test_dataset)
+                if test_acc > best_acc:
+                    best_acc = test_acc
                 print(f"Epoch {epoch}, Class Loss {total_class_loss / len(train_loader):.4f}, Domain Loss {total_domain_loss / len(train_loader):.4f}, Acc {test_acc:.4f}")
+        validation_accs[idx] = best_acc
+        print(f"Fold {idx} best acc: {validation_accs[idx]:.4f}")
+    acc_mean = np.mean(validation_accs)
+    acc_std = np.std(validation_accs)
+    print(f"Average acc is: {acc_mean:.4f}±{acc_std:.4f}")
 
 
 def train_generalization(args, train_dataset, test_dataset):
-    criterion = nn.CrossEntropyLoss()
+    validation_accs = np.zeros(15)
     for idx in range(15):
         train_dataset.prepare_dataset(idx)
         test_dataset.prepare_dataset(idx)
@@ -93,14 +95,14 @@ def train_generalization(args, train_dataset, test_dataset):
         model = create_model(args).to(device)
         optimizer = torch.optim.Adam(model.parameters(), lr = args.lr)
 
+        best_acc = 0.
         for epoch in range(args.num_epoch):
             model.train()
             total_loss = 0.
             for i, data in enumerate(train_loader):
                 x, y = data
-                x, y = x.to(device), y.to(device)
-                pred_y = model(x.float())
-                loss = criterion(pred_y, y)
+                x, y = x.to(device).float(), y.to(device)
+                loss = model.compute_loss((x, y))
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -109,7 +111,14 @@ def train_generalization(args, train_dataset, test_dataset):
                 model.eval()
                 _, test_y_pred = torch.max(model(test_x.float()), dim=1)
                 test_acc = (test_y_pred == test_y + 1).sum().item()/len(test_dataset)
+                if test_acc > best_acc:
+                    best_acc = test_acc
                 print(f"Epoch {epoch}, Loss {total_loss / len(train_loader):.4f}, Acc {test_acc:.4f}")
+        validation_accs[idx] = best_acc
+        print(f"Fold {idx} best acc: {validation_accs[idx]:.4f}")
+    acc_mean = np.mean(validation_accs)
+    acc_std = np.std(validation_accs)
+    print(f"Average acc is: {acc_mean:.4f}±{acc_std:.4f}")
 
 
 if __name__ == '__main__':

@@ -10,6 +10,6 @@ def parse_arguments():
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-5)
     parser.add_argument("--num_epoch", type=int, default=300)
-    parser.add_argument("--display_epoch", type=int, default=10)
+    parser.add_argument("--display_epoch", type=int, default=1)
     parser.add_argument("--seed", type=int, default=42)
     return parser.parse_args()
