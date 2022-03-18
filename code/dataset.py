@@ -36,6 +36,15 @@ class SeedDataset(Dataset):
         self.x = np.array(self.x)
         self.y = np.squeeze(np.array(self.y))
 
+    def prepare_gen(self):
+        self.x = self.x_total[0]
+        self.y = self.y_total[0]
+        for i in range(len(self.x_total)):
+            self.x = np.concatenate((self.x, self.x_total[i]), axis=0)
+            self.y = np.concatenate((self.y, self.y_total[i]), axis=0)
+        self.x = np.array(self.x)
+        self.y = np.squeeze(np.array(self.y))
+
     def __getitem__(self, index):
         return self.x[index], self.y[index]+1
 

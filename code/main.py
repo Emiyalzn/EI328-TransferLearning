@@ -1,14 +1,13 @@
-from parser import parse_arguments
-import numpy as np
+import torch
 from torch.utils.data import DataLoader
+import numpy as np
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 from sklearn.metrics import classification_report, accuracy_score
 from dataset import SeedDataset
 from models import create_model
-import torch.nn as nn
-import torch
+from parser import parse_arguments
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 

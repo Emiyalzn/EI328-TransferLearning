@@ -15,6 +15,10 @@ def create_model(args):
         return IRM(310, args.hidden_dim, 3, args.penalty_weight)
     elif args.model == 'REx':
         return REx(310, args.hidden_dim, 3, args.variance_weight)
+    elif args.model == 'WGANGen':
+        return WGANGen(64, 310, 128)
+    else:
+        raise ValueError("Unknown model type!")
 
 class MLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_labels):
@@ -228,6 +232,28 @@ class REx(nn.Module):
         loss_mean = torch.mean(loss)
         loss_var = torch.var(loss)
         return loss_mean + self.variance_weight * loss_var
+
+class WGANGen:
+    def __init__(self, noise_dim, input_dim, hidden_dim):
+        self.noise_dim = noise_dim
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+
+        self.netG = nn.Sequential(
+            nn.Linear(noise_dim, hidden_dim),
+            nn.ReLU(True),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(True),
+            nn.Linear(hidden_dim, input_dim)
+        )
+
+        self.netD = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(True),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(True),
+            nn.Linear(hidden_dim, 1)
+        )
 
 
 
