@@ -3,10 +3,14 @@ import torch.nn as nn
 import torch
 from torch import autograd
 import torch.nn.functional as F
+from torch.distributions import Categorical
+import numpy as np
 
 def create_model(args):
     if args.model == 'DANN':
         return DANN(310, args.hidden_dim, 3, 2, args.lamda)
+    elif args.model == 'ASDA':
+        return ASDA(310, args.hidden_dim, 3, 2, args.lamda)
     elif args.model == 'MLP':
         return MLP(310, args.hidden_dim, 3)
     elif args.model == 'ResNet':
@@ -135,13 +139,13 @@ class DANN(nn.Module):
         domain_output = self.domain_classifier(reverse_feature)
         return class_output, domain_output
 
-    def compute_loss(self, train_data, test_data):
-        inputs, class_labels, domain_source_labels = train_data
+    def compute_loss(self, source_data, target_data):
+        inputs, class_labels, domain_source_labels = source_data
         pred_class_label, pred_domain_label = self.forward(inputs)
         class_loss = self.criterion(pred_class_label, class_labels)
         domain_source_loss = self.criterion(pred_domain_label, domain_source_labels)
 
-        inputs, domain_target_labels = test_data
+        inputs, domain_target_labels = target_data
         _, pred_domain_label = self.forward(inputs)
         domain_target_loss = self.criterion(pred_domain_label, domain_target_labels)
 
@@ -254,6 +258,102 @@ class WGANGen:
             nn.ReLU(True),
             nn.Linear(hidden_dim, 1)
         )
+
+class ASDA(nn.Module):
+    def __init__(self, input_dim, hidden_dim, num_labels, num_domains, lamda):
+        super(ASDA, self).__init__()
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.num_labels = num_labels
+        self.num_domains = num_domains
+        self.lamda = lamda
+        self.criterion = nn.CrossEntropyLoss(reduction='none')
+
+        self.feature_extractor = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU()
+        )
+
+        self.label_classifier = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim//2),
+            nn.ReLU(),
+            nn.Linear(hidden_dim//2, hidden_dim//2),
+            nn.ReLU(),
+            nn.Linear(hidden_dim//2, num_labels)
+        )
+
+        self.domain_classifier = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim//2),
+            nn.ReLU(),
+            nn.Linear(hidden_dim//2, hidden_dim//2),
+            nn.ReLU(),
+            nn.Linear(hidden_dim//2, num_domains)
+        )
+
+    def forward(self, input_data):
+        feature_mapping = self.feature_extractor(input_data)
+        reverse_feature = ReverseLayerF.apply(feature_mapping, self.lamda)
+        class_output = self.label_classifier(feature_mapping)
+        domain_output = self.domain_classifier(reverse_feature)
+        return feature_mapping, class_output, domain_output
+
+    def separability_loss(self, labels, latents, imbalance_parameter=1):
+        criteria = nn.modules.loss.CosineEmbeddingLoss()
+        loss_up = 0
+        one_cuda = torch.ones(1).cuda()
+        mean = torch.mean(latents, dim=0).cuda().view(1, -1)
+        loss_down = 0
+        for i in range(self.num_labels):
+            indecies = labels.eq(i)
+            mean_i = torch.mean(latents[indecies], dim=0).view(1, -1)
+            if str(mean_i.norm().item()) != 'nan':
+                for latent in latents[indecies]:
+                    loss_up += criteria(latent.view(1, -1), mean_i, one_cuda)
+                loss_down += criteria(mean, mean_i, one_cuda)
+        loss = (loss_up / loss_down) * imbalance_parameter
+        return loss
+
+    def pseudo_labeling(self, pred_class_label, m=.8):
+        pred_class_label = F.softmax(pred_class_label, dim=1)
+        pred_class_prob, pred_class_label = torch.max(pred_class_label, dim=1)
+        indices = pred_class_prob > m
+        pseudo_label = pred_class_label[indices]
+        _, counts = np.unique(pseudo_label.cpu().numpy(), return_counts=True)
+        if counts.shape[0] == 0:
+            return False
+        else:
+            mi = np.min(counts)
+            if len(counts) < 10:
+                mi = 0
+            ma = np.max(counts)
+            return indices, pseudo_label, (mi + 1) / (ma + 1)
+
+    def compute_loss(self, source_data, target_data):
+        source_inputs, source_labels, domain_source_labels = source_data
+        target_inputs, domain_target_labels = target_data
+
+        latent_source, pred_class_label, pred_domain_label = self.forward(source_inputs)
+        class_loss = self.criterion(pred_class_label, source_labels).mean()
+        source_entropy = Categorical(logits=pred_class_label).entropy()
+        source_domain_loss = ((torch.ones_like(source_entropy) + source_entropy.detach()/self.num_labels) * self.criterion(pred_domain_label, domain_source_labels)).mean()
+
+        latent_target, pred_class_label, pred_domain_label = self.forward(target_inputs)
+        target_entropy = Categorical(logits=pred_class_label).entropy()
+        target_entropy_loss = target_entropy.mean()
+        target_domain_loss = ((torch.ones_like(target_entropy) + target_entropy.detach()/self.num_labels) * self.criterion(pred_domain_label, domain_target_labels)).mean()
+
+        sep_loss = 0.
+        data = self.pseudo_labeling(pred_class_label)
+        if data:
+            indices, pseudo_labels, imbalance_parameter = data
+            latent_target = latent_target[indices, :]
+            sep_loss = self.separability_loss(torch.cat((source_labels, pseudo_labels)),
+                                              torch.cat((latent_source, latent_target)),
+                                              imbalance_parameter)
+
+        return class_loss, source_domain_loss + target_domain_loss + sep_loss * 0.5
 
 
 

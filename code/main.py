@@ -71,7 +71,7 @@ def train_DANN(args, train_dataset, test_datastet):
                 total_domain_loss += domain_loss.detach().cpu().numpy()
             if epoch % args.display_epoch == 0:
                 model.eval()
-                pred_class_label, _ = model(test_x.float())
+                _, pred_class_label, _ = model(test_x.float())
                 _, test_y_pred = torch.max(pred_class_label, dim=1)
                 test_acc = (test_y_pred == test_y + 1).sum().item() / len(test_dataset)
                 if test_acc > best_acc:
@@ -142,7 +142,7 @@ if __name__ == '__main__':
 
     if args.model == 'svm':
         train_svm(args, train_dataset, test_dataset)
-    elif args.model == 'DANN':
+    elif args.model == 'DANN' or args.model == 'ASDA':
         train_DANN(args, train_dataset, test_dataset)
     elif args.model == 'ADDA' or args.model == 'WGANDA':
         train_adaptation(args, train_dataset, test_dataset)

@@ -104,8 +104,8 @@ def wGAN_augmentation(args, dataset):
         class_prob, class_label = torch.max(F.softmax(class_logits, dim=1), dim=1)
 
         # record those generated data with high confidence
-        generate_X = fake[class_prob > .8].detach().cpu().numpy()
-        generate_Y = class_label[class_prob > .8].detach().cpu().numpy() - 1
+        generate_X = fake[class_prob > .9].detach().cpu().numpy()
+        generate_Y = class_label[class_prob > .9].detach().cpu().numpy() - 1
 
         if generate_Y.shape[0] > 0:
             if flag == 0:
@@ -116,7 +116,7 @@ def wGAN_augmentation(args, dataset):
                 auxiliary_X = np.concatenate((auxiliary_X, generate_X), axis=0)
                 auxiliary_Y = np.concatenate((auxiliary_Y, generate_Y), axis=0)
             # early stop with enough data
-            if auxiliary_Y.shape[0] > 3000:
+            if auxiliary_Y.shape[0] > 1000:
                 break
 
         print(f"Iteration {iteration}, D loss: {D_cost:.4f}, G loss: {G_cost:.4f}")
