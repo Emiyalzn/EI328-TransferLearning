@@ -20,7 +20,6 @@ def parse_arguments():
     parser.add_argument("--critic_iters", type=int, default=10)
     parser.add_argument("--gen_iters", type=int, default=10000)
     parser.add_argument("--is_augmentation", action='store_true')
-    parser.add_argument("--pretrain_iters", type=int, default=20000)
-    parser.add_argument("--train_iters", type=int, default=1000)
+    parser.add_argument("--display_iters", type=int, default=10)
 
     return parser.parse_args()

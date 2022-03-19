@@ -1,6 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 import torch
+
+figure_dir = "../figure"
 
 def plot_embedding(X, y, d, title=None):
     """Plot an embedding X with the class label y colored by the domain d."""
@@ -16,4 +19,4 @@ def plot_embedding(X, y, d, title=None):
                     marker = 'o',
                     s = 12)
         savename = title + '.png'
-        plt.savefig(savename, dpi=300)
+        plt.savefig(os.path.join(figure_dir,savename), dpi=300)
