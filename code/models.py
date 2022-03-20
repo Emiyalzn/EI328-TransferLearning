@@ -10,7 +10,7 @@ def create_model(args):
     if args.model == 'DANN':
         return DANN(310, args.hidden_dim, 3, 2, args.lamda)
     elif args.model == 'ASDA':
-        return ASDA(310, args.hidden_dim, 3, 2, args.lamda)
+        return ASDA(310, args.hidden_dim, 3, 2, args.lamda, args.triplet_weight)
     elif args.model == 'MLP':
         return MLP(310, args.hidden_dim, 3)
     elif args.model == 'ResNet':
@@ -257,13 +257,14 @@ class WGANGen:
         )
 
 class ASDA(nn.Module):
-    def __init__(self, input_dim, hidden_dim, num_labels, num_domains, lamda):
+    def __init__(self, input_dim, hidden_dim, num_labels, num_domains, lamda, triplet_weight):
         super(ASDA, self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.num_labels = num_labels
         self.num_domains = num_domains
         self.lamda = lamda
+        self.triplet_weight = triplet_weight
         self.criterion = nn.CrossEntropyLoss(reduction='none')
 
         self.feature_extractor = nn.Sequential(
@@ -290,6 +291,10 @@ class ASDA(nn.Module):
         )
 
     def forward(self, input_data):
+        _, class_output, domain_output = self.record_forward(input_data)
+        return class_output, domain_output
+
+    def record_forward(self, input_data):
         feature_mapping = self.feature_extractor(input_data)
         reverse_feature = ReverseLayerF.apply(feature_mapping, self.lamda)
         class_output = self.label_classifier(feature_mapping)
@@ -331,19 +336,16 @@ class ASDA(nn.Module):
         source_inputs, source_labels, domain_source_labels = source_data
         target_inputs, domain_target_labels = target_data
 
-        latent_source, pred_class_label, pred_domain_label = self.forward(source_inputs)
+        latent_source, pred_class_label, pred_domain_label = self.record_forward(source_inputs)
         source_class_loss = self.criterion(pred_class_label, source_labels).mean()
         source_entropy = Categorical(logits=pred_class_label).entropy()
         source_domain_loss = (
                     (torch.ones_like(source_entropy) + source_entropy.detach() / self.num_labels) * self.criterion(
                 pred_domain_label, domain_source_labels)).mean()
-        # source_domain_loss = ((torch.ones_like(source_entropy)) * self.criterion(pred_domain_label, domain_source_labels)).mean()
 
-        latent_target, pred_class_label, pred_domain_label = self.forward(target_inputs)
+        latent_target, pred_class_label, pred_domain_label = self.record_forward(target_inputs)
         target_entropy = Categorical(logits=pred_class_label).entropy()
-        target_entropy_loss = target_entropy.mean()/self.num_labels
         target_domain_loss = ((torch.ones_like(target_entropy) + target_entropy.detach() / self.num_labels) * self.criterion(pred_domain_label, domain_target_labels)).mean()
-        # target_domain_loss = ((torch.ones_like(target_entropy)) * self.criterion(pred_domain_label, domain_target_labels)).mean()
 
         sep_loss = 0.
         data = self.pseudo_labeling(pred_class_label)
@@ -354,44 +356,7 @@ class ASDA(nn.Module):
                                               torch.cat((latent_source, latent_target)),
                                               imbalance_parameter)
 
-        return source_class_loss, (source_domain_loss + target_domain_loss) * self.lamda + 0.1 * target_entropy_loss
-
-
-    # def finetune_loss(self, source_data, target_data):
-    #     source_inputs, source_labels, domain_source_labels = source_data
-    #     target_inputs, domain_target_labels = target_data
-    #
-    #     latent_source, pred_class_label, pred_domain_label = self.forward(source_inputs)
-    #     source_class_loss = self.criterion(pred_class_label, source_labels).mean()
-    #     source_entropy = Categorical(logits=pred_class_label).entropy()
-    #     source_domain_loss = ((torch.ones_like(source_entropy) + source_entropy.detach()/self.num_labels) * self.criterion(pred_domain_label, domain_source_labels)).mean()
-    #     # source_domain_loss = ((torch.ones_like(source_entropy)) * self.criterion(pred_domain_label, domain_source_labels)).mean()
-    #
-    #     latent_target, pred_class_label, pred_domain_label = self.forward(target_inputs)
-    #     target_entropy = Categorical(logits=pred_class_label).entropy()
-    #     # target_entropy_loss = target_entropy.mean()/self.num_labels
-    #     target_domain_loss = ((torch.ones_like(target_entropy) + target_entropy.detach()/self.num_labels) * self.criterion(pred_domain_label, domain_target_labels)).mean()
-    #     # target_domain_loss = ((torch.ones_like(target_entropy)) * self.criterion(pred_domain_label, domain_target_labels)).mean()
-    #
-    #     sep_loss = 0.
-    #     # target_class_loss = 0.
-    #     data = self.pseudo_labeling(pred_class_label)
-    #     if data:
-    #         indices, pseudo_labels, imbalance_parameter = data
-    #         latent_target = latent_target[indices, :]
-    #         # pred_class_label = pred_class_label[indices, :]
-    #         sep_loss = self.separability_loss(torch.cat((source_labels, pseudo_labels)),
-    #                                           torch.cat((latent_source, latent_target)),
-    #                                           imbalance_parameter)
-    #         # target_class_loss = self.criterion(pred_class_label, pseudo_labels).mean()
-    #
-    #     return (source_domain_loss + target_domain_loss) * 1. + source_class_loss + 0.1 * sep_loss
-    #
-    # def pretrain_loss(self, source_data):
-    #     source_input, source_label = source_data
-    #     latent_source = self.feature_extractor(source_input)
-    #     source_preds = self.label_classifier(latent_source)
-    #     return self.criterion(source_preds, source_label).mean()
+        return source_class_loss, (source_domain_loss + target_domain_loss) * self.lamda +  sep_loss * self.triplet_weight
 
 
 

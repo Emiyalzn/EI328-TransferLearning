@@ -5,11 +5,11 @@ import os
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
-from sklearn.manifold import TSNE
 from sklearn.metrics import classification_report, accuracy_score
 from dataset import SeedDataset
 from models import create_model
 from parser import parse_arguments
+from utils import plot_embedding
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 checkpoint_dir = "../checkpoint"
@@ -72,7 +72,7 @@ def train_DANN(args, train_dataset, test_datastet):
                 total_domain_loss += domain_loss.detach().cpu().numpy()
             if epoch % args.display_epoch == 0:
                 model.eval()
-                _, pred_class_label, _ = model(test_x.float())
+                pred_class_label, _ = model(test_x.float())
                 _, test_y_pred = torch.max(pred_class_label, dim=1)
                 test_acc = (test_y_pred == test_y + 1).sum().item() / len(test_dataset)
                 if test_acc > best_acc:
@@ -85,72 +85,6 @@ def train_DANN(args, train_dataset, test_datastet):
     acc_mean = np.mean(validation_accs)
     acc_std = np.std(validation_accs)
     print(f"Average acc is: {acc_mean:.4f}±{acc_std:.4f}")
-
-def train_adaptation(args, train_dataset, test_dataset):
-    for idx in range(15):
-        train_dataset.prepare_dataset(idx)
-        test_dataset.prepare_dataset(idx)
-        test_x, test_y = torch.tensor(test_dataset.x).to(device), torch.tensor(test_dataset.y).to(device)
-
-        model = create_model(args).to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr = args.lr)
-
-        source_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True)
-        target_loader = DataLoader(dataset=test_dataset, batch_size=args.batch_size, shuffle=True)
-        source_iter, target_iter = iter(source_loader), iter(target_loader)
-        source_per_epoch, target_per_epoch = len(source_iter), len(target_iter)
-
-        print("############ Start Pretraining #############")
-        for step in range(args.pretrain_iters + 1):
-            model.train()
-            # refresh
-            if (step + 1) % source_per_epoch == 0:
-                source_iter = iter(source_loader)
-            s_input, s_label = next(source_iter)
-            source_data = s_input.to(device).float(), s_label.to(device)
-            class_loss = model.pretrain_loss(source_data)
-            optimizer.zero_grad()
-            class_loss.backward()
-            optimizer.step()
-
-            if (step+1) % args.display_iters == 0:
-                model.eval()
-                _, test_y_pred, _ = model(test_x.float())
-                _, test_y_pred = torch.max(test_y_pred, dim=1)
-                test_acc = (test_y_pred == test_y + 1).sum().item() / len(test_dataset)
-                class_loss = class_loss.detach().cpu().numpy()
-                print(f"Iteration {step+1}, Class Loss {class_loss:.4f}, Acc {test_acc:.4f}")
-
-        source_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True)
-        target_loader = DataLoader(dataset=test_dataset, batch_size=args.batch_size, shuffle=True)
-        source_iter, target_iter = iter(source_loader), iter(target_loader)
-        print("############ Start Finetuning #############")
-        for step in range(args.tune_iters):
-            model.train()
-            # refresh
-            if (step + 1) % source_per_epoch == 0:
-                source_iter = iter(source_loader)
-            if (step + 1) % target_per_epoch == 0:
-                target_iter = iter(target_loader)
-            s_input, s_label = next(source_iter)
-            domain_source_labels = torch.zeros(len(s_input)).long()
-            source_data = s_input.to(device).float(), s_label.to(device), domain_source_labels.to(device)
-            t_input, t_label = next(target_iter)
-            domain_target_labels = torch.ones(len(t_input)).long()
-            target_data = t_input.to(device).float(), domain_target_labels.to(device)
-            domain_loss = model.finetune_loss(source_data, target_data)
-            optimizer.zero_grad()
-            domain_loss.backward()
-            optimizer.step()
-
-            if (step+1) % args.display_iters == 0:
-                model.eval()
-                _, test_y_pred, _ = model(test_x.float())
-                _, test_y_pred = torch.max(test_y_pred, dim=1)
-                test_acc = (test_y_pred == test_y + 1).sum().item() / len(test_dataset)
-                domain_loss = domain_loss.detach().cpu().numpy()
-                print(f"Iteration {step+1}, Domain Loss {domain_loss:.4f}, Acc {test_acc:.4f}")
-
 
 def train_generalization(args, train_dataset, test_dataset):
     validation_accs = np.zeros(15)
@@ -191,6 +125,8 @@ def train_generalization(args, train_dataset, test_dataset):
     acc_std = np.std(validation_accs)
     print(f"Average acc is: {acc_mean:.4f}±{acc_std:.4f}")
 
+def train_adaptation(args, train_dataset, test_dataset):
+    pass
 
 if __name__ == '__main__':
     args = parse_arguments()
@@ -206,13 +142,11 @@ if __name__ == '__main__':
 
     if args.model == 'svm':
         train_svm(args, train_dataset, test_dataset)
-    elif args.model == 'DANN':
+    elif args.model == 'DANN' or args.model == 'ASDA':
         train_DANN(args, train_dataset, test_dataset)
     elif args.model == 'ADDA':
         train_adaptation(args, train_dataset, test_dataset)
     elif args.model == 'MLP' or args.model == 'ResNet' or args.model == 'IRM' or args.model == 'REx':
         train_generalization(args, train_dataset, test_dataset)
-    elif args.model == 'ASDA':
-        train_DANN(args, train_dataset, test_dataset)
     else:
         raise ValueError("Unknown model type!")

@@ -8,6 +8,7 @@ from parser import parse_arguments
 from models import create_model
 from dataset import SeedDataset, DATASET_PATH
 import scipy.io as sio
+from utils import plot_train_curves
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 checkpoint_dir = "../checkpoint"
@@ -52,6 +53,7 @@ def wGAN_augmentation(args, dataset):
     auxiliary_X = None
     auxiliary_Y = None
 
+    gen_loss, dis_loss, mean_prob = [], [], []
     for iteration in range(args.gen_iters):
         for p in wGAN.netD.parameters():
             p.requires_grad = True
@@ -73,7 +75,7 @@ def wGAN_augmentation(args, dataset):
 
             # train with fake
             noise = torch.randn(args.batch_size, 64).to(device)
-            noisev = autograd.Variable(noise, volatile=True)
+            noisev = autograd.Variable(noise, requires_grad=False)
             fake = autograd.Variable(wGAN.netG(noisev).data)
             inputv = fake
             D_fake = wGAN.netD(inputv).mean()
@@ -83,8 +85,7 @@ def wGAN_augmentation(args, dataset):
             gradient_penalty = calc_gradient_penalty(wGAN.netD, real_data_v.data, fake.data) * args.wgan_lamda
             gradient_penalty.backward()
 
-            D_cost = D_fake - D_real + gradient_penalty
-            # Wasserstein_D  = D_real - D_fake
+            D_cost = (D_fake - D_real + gradient_penalty).detach().cpu().numpy()
             optimizerD.step()
 
         for p in wGAN.netD.parameters():
@@ -96,7 +97,7 @@ def wGAN_augmentation(args, dataset):
         fake = wGAN.netG(noisev)
         G = wGAN.netD(fake).mean()
         G.backward(mone)
-        G_cost = -G
+        G_cost = -G.detach().cpu().numpy()
         optimizerG.step()
 
         # measure confidence
@@ -104,8 +105,9 @@ def wGAN_augmentation(args, dataset):
         class_prob, class_label = torch.max(F.softmax(class_logits, dim=1), dim=1)
 
         # record those generated data with high confidence
-        generate_X = fake[class_prob > .9].detach().cpu().numpy()
-        generate_Y = class_label[class_prob > .9].detach().cpu().numpy() - 1
+        generate_X = fake[class_prob > .8].detach().cpu().numpy()
+        generate_Y = class_label[class_prob > .8].detach().cpu().numpy() - 1
+        mean_class_prob = np.mean(class_prob.detach().cpu().numpy())
 
         if generate_Y.shape[0] > 0:
             if flag == 0:
@@ -119,9 +121,11 @@ def wGAN_augmentation(args, dataset):
             if auxiliary_Y.shape[0] > 1000:
                 break
 
-        print(f"Iteration {iteration}, D loss: {D_cost:.4f}, G loss: {G_cost:.4f}")
+        gen_loss.append(G_cost); dis_loss.append(D_cost); mean_prob.append(mean_class_prob)
+        print(f"Iteration {iteration}, D loss: {D_cost:.4f}, G loss: {G_cost:.4f}, mean prob {mean_class_prob:.4f}")
 
-    sio.savemat(os.path.join(DATASET_PATH, f"auxiliary_data_label_{auxiliary_Y[1000]}.mat"), {'X': auxiliary_X, 'Y': auxiliary_Y})
+    plot_train_curves(gen_loss, dis_loss, mean_prob)
+    sio.savemat(os.path.join(DATASET_PATH, f"auxiliary_data_label_{auxiliary_Y[500]}.mat"), {'X': auxiliary_X, 'Y': auxiliary_Y})
 
 if __name__ == '__main__':
     dataset = SeedDataset(True)
