@@ -140,7 +140,7 @@ if __name__ == '__main__':
         np.random.seed(args.seed)
         torch.backends.cudnn.deterministic = True
 
-    if args.model == 'svm':
+    if args.model == 'SVM':
         train_svm(args, train_dataset, test_dataset)
     elif args.model == 'DANN' or args.model == 'ASDA':
         train_DANN(args, train_dataset, test_dataset)

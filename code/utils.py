@@ -46,6 +46,8 @@ def plot_subject_accs():
 
     xticks = np.arange(16)
 
+    SVM_y = [0.3444, 0.4608, 0.6167, 0.7516, 0.4069, 0.6237, 0.5687, 0.4116, 0.3447, 0.3300, 0.7952, 0.6420, 0.7166, 0.5392, 0.7039, 0.5504]
+    SVM_yerr = [0.] * 15 + [0.1531]
     MLP_y = [0.6909, 0.6585, 0.6016, 0.7319, 0.632, 0.6532,	0.6405,	0.4643,	0.7139,	0.7065,	0.8005,	0.6037,	0.9582,	0.5628,	0.764, 0.6788]
     MLP_yerr = [0.] * 15 + [0.1098]
     DANN_y = [0.8226, 0.7702, 0.8265, 0.8869, 0.675, 0.6942, 0.8533, 0.6538, 0.8524, 0.8757, 0.8913, 0.731,	0.9753,	0.896, 0.8795, 0.8189]
@@ -54,15 +56,16 @@ def plot_subject_accs():
     ASDA_yerr = [0.] * 15 + [0.0983]
 
     plt.bar(x=['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', 'mean'],
-            height=MLP_y, yerr=MLP_yerr, color='tomato',
-            label='MLP', alpha=1.0, width=0.27)
-    plt.bar(x=xticks + 0.25, height=DANN_y, yerr=DANN_yerr, color='sienna', label='DANN', alpha=1.0, width=0.27)
-    plt.bar(x=xticks + 0.5, height=ASDA_y, yerr=ASDA_yerr, color='purple', label='DANN', alpha=1.0, width=0.27)
+            height=SVM_y, yerr=SVM_yerr, color='darkorange', label='SVM', alpha=1.0, width=0.2)
+    plt.bar(x=xticks + 0.2, height=MLP_y, yerr=MLP_yerr, color='tomato', label='MLP', alpha=1.0, width=0.2)
+    plt.bar(x=xticks + 0.4, height=DANN_y, yerr=DANN_yerr, color='sienna', label='DANN', alpha=1.0, width=0.2)
+    plt.bar(x=xticks + 0.6, height=ASDA_y, yerr=ASDA_yerr, color='purple', label='DANN', alpha=1.0, width=0.2)
     plt.xticks(xticks + 0.3)
 
+    plt.ylim([0.3, 1.0])
     plt.ylabel('Accuracy', size=18)
     plt.xlabel('Subject Index', size=18)
-    plt.legend(loc='upper center', fontsize=12, ncol=3, bbox_to_anchor=(0.5, 1.2))
+    plt.legend(loc='upper center', fontsize=12, ncol=4, bbox_to_anchor=(0.5, 1.2))
     plt.tick_params(labelsize=13)
     fig.tight_layout()
     fig.savefig(os.path.join(figure_dir, 'acc.pdf'), bbox_inches='tight')
@@ -90,25 +93,25 @@ def plot_train_curves(gen_loss, dis_loss, mean_prob):
     fig.savefig(os.path.join(figure_dir, "augmentation_curve.pdf"))
 
 if __name__ == '__main__':
-    # args = parse_arguments()
-    # dataset = SeedDataset(False)
-    #
-    # dataset.prepare_dataset(0)
-    # source_x, source_y = torch.tensor(dataset.x).to(device).float(), dataset.y
-    # dataset.prepare_dataset(14)
-    # target_x, target_y = torch.tensor(dataset.x).to(device).float(), dataset.y
-    #
-    # model = create_model(args).to(device)
-    # model_state_dict = torch.load(os.path.join(checkpoint_dir, args.model+'_checkpoint.pt'))
-    # model.load_state_dict(model_state_dict)
-    # model.eval()
-    #
-    # source_feature = model.label_classifier(model.feature_extractor(source_x)).detach().cpu().numpy()
-    # target_feature = model.label_classifier(model.feature_extractor(target_x)).detach().cpu().numpy()
-    # feature_mapping = np.concatenate((source_feature, target_feature), axis=0)
-    # labels = ['source'] * source_feature.shape[0] + ['target'] * target_feature.shape[0]
-    #
-    # plot_embedding(feature_mapping, labels, args.model)
+    args = parse_arguments()
+    dataset = SeedDataset(False)
 
-    plot_subject_accs()
+    dataset.prepare_dataset(0)
+    source_x, source_y = torch.tensor(dataset.x).to(device).float(), dataset.y
+    dataset.prepare_dataset(14)
+    target_x, target_y = torch.tensor(dataset.x).to(device).float(), dataset.y
+
+    model = create_model(args).to(device)
+    model_state_dict = torch.load(os.path.join(checkpoint_dir, args.model+'_checkpoint.pt'))
+    model.load_state_dict(model_state_dict)
+    model.eval()
+
+    source_feature = model.label_classifier(model.feature_extractor(source_x)).detach().cpu().numpy()
+    target_feature = model.label_classifier(model.feature_extractor(target_x)).detach().cpu().numpy()
+    feature_mapping = np.concatenate((source_feature, target_feature), axis=0)
+    labels = ['source'] * source_feature.shape[0] + ['target'] * target_feature.shape[0]
+
+    plot_embedding(feature_mapping, labels, args.model)
+
+    # plot_subject_accs()
 
