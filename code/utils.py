@@ -50,8 +50,8 @@ def plot_subject_accs():
     MLP_yerr = [0.] * 15 + [0.1098]
     DANN_y = [0.8226, 0.7702, 0.8265, 0.8869, 0.675, 0.6942, 0.8533, 0.6538, 0.8524, 0.8757, 0.8913, 0.731,	0.9753,	0.896, 0.8795, 0.8189]
     DANN_yerr = [0.] * 15 + [0.0906]
-    ASDA_y = [0.8226, 0.7702, 0.8265, 0.8869, 0.675, 0.6942, 0.8533, 0.6538, 0.8524, 0.8757, 0.8913, 0.731, 0.9753, 0.896, 0.8795, 0.8189]
-    ASDA_yerr = [0.] * 15 + [0.0906]
+    ASDA_y = [0.8324, 0.8135, 0.9343, 0.9084, 0.687, 0.741,	0.8362,	0.6296,	0.8977,	0.864, 0.9244, 0.8322, 0.986, 0.912, 0.923, 0.8481]
+    ASDA_yerr = [0.] * 15 + [0.0983]
 
     plt.bar(x=['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', 'mean'],
             height=MLP_y, yerr=MLP_yerr, color='tomato',
@@ -90,25 +90,25 @@ def plot_train_curves(gen_loss, dis_loss, mean_prob):
     fig.savefig(os.path.join(figure_dir, "augmentation_curve.pdf"))
 
 if __name__ == '__main__':
-    args = parse_arguments()
-    dataset = SeedDataset(False)
+    # args = parse_arguments()
+    # dataset = SeedDataset(False)
+    #
+    # dataset.prepare_dataset(0)
+    # source_x, source_y = torch.tensor(dataset.x).to(device).float(), dataset.y
+    # dataset.prepare_dataset(14)
+    # target_x, target_y = torch.tensor(dataset.x).to(device).float(), dataset.y
+    #
+    # model = create_model(args).to(device)
+    # model_state_dict = torch.load(os.path.join(checkpoint_dir, args.model+'_checkpoint.pt'))
+    # model.load_state_dict(model_state_dict)
+    # model.eval()
+    #
+    # source_feature = model.label_classifier(model.feature_extractor(source_x)).detach().cpu().numpy()
+    # target_feature = model.label_classifier(model.feature_extractor(target_x)).detach().cpu().numpy()
+    # feature_mapping = np.concatenate((source_feature, target_feature), axis=0)
+    # labels = ['source'] * source_feature.shape[0] + ['target'] * target_feature.shape[0]
+    #
+    # plot_embedding(feature_mapping, labels, args.model)
 
-    dataset.prepare_dataset(0)
-    source_x, source_y = torch.tensor(dataset.x).to(device).float(), dataset.y
-    dataset.prepare_dataset(14)
-    target_x, target_y = torch.tensor(dataset.x).to(device).float(), dataset.y
-
-    model = create_model(args).to(device)
-    model_state_dict = torch.load(os.path.join(checkpoint_dir, args.model+'_checkpoint.pt'))
-    model.load_state_dict(model_state_dict)
-    model.eval()
-
-    source_feature = model.label_classifier(model.feature_extractor(source_x)).detach().cpu().numpy()
-    target_feature = model.label_classifier(model.feature_extractor(target_x)).detach().cpu().numpy()
-    feature_mapping = np.concatenate((source_feature, target_feature), axis=0)
-    labels = ['source'] * source_feature.shape[0] + ['target'] * target_feature.shape[0]
-
-    plot_embedding(feature_mapping, labels, args.model)
-
-    # plot_subject_accs()
+    plot_subject_accs()
 
