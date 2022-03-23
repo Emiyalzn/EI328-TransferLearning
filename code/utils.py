@@ -2,7 +2,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import seaborn as sns
-import pickle
 from sklearn.manifold import TSNE
 from dataset import SeedDataset
 from models import create_model
@@ -59,7 +58,7 @@ def plot_subject_accs():
             height=SVM_y, yerr=SVM_yerr, color='darkorange', label='SVM', alpha=1.0, width=0.2)
     plt.bar(x=xticks + 0.2, height=MLP_y, yerr=MLP_yerr, color='tomato', label='MLP', alpha=1.0, width=0.2)
     plt.bar(x=xticks + 0.4, height=DANN_y, yerr=DANN_yerr, color='sienna', label='DANN', alpha=1.0, width=0.2)
-    plt.bar(x=xticks + 0.6, height=ASDA_y, yerr=ASDA_yerr, color='purple', label='DANN', alpha=1.0, width=0.2)
+    plt.bar(x=xticks + 0.6, height=ASDA_y, yerr=ASDA_yerr, color='purple', label='ASDA(ours)', alpha=1.0, width=0.2)
     plt.xticks(xticks + 0.3)
 
     plt.ylim([0.3, 1.0])

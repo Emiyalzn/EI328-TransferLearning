@@ -9,8 +9,8 @@ import numpy as np
 def create_model(args):
     if args.model == 'DANN':
         return DANN(310, args.hidden_dim, 3, 2, args.lamda)
-    elif args.model == 'ASDA':
-        return ASDA(310, args.hidden_dim, 3, 2, args.lamda, args.triplet_weight)
+    elif args.model == 'SADA':
+        return SADA(310, args.hidden_dim, 3, 2, args.lamda, args.triplet_weight)
     elif args.model == 'MLP':
         return MLP(310, args.hidden_dim, 3)
     elif args.model == 'ResNet':
@@ -26,6 +26,7 @@ def create_model(args):
     else:
         raise ValueError("Unknown model type!")
 
+# conventional deep learning models
 class MLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_labels):
         super(MLP, self).__init__()
@@ -90,6 +91,40 @@ class ResNet(nn.Module):
         loss = self.criterion(class_output, y)
         return loss
 
+# domain generalization models
+class IRM(MLP):
+    def __init__(self, input_dim, hidden_dim, num_labels, penalty_weight):
+        super(IRM, self).__init__(input_dim, hidden_dim, num_labels)
+        self.penalty_weight = penalty_weight
+
+    def penalty(self, logits, y):
+        scale = torch.ones((1, self.num_labels)).to(y.device).requires_grad_()
+        loss = self.criterion(logits * scale, y)
+        grad = autograd.grad(loss, [scale], create_graph=True)[0]
+        return torch.sum(grad ** 2)
+
+    def compute_loss(self, data):
+        x, y = data
+        class_output = self.forward(x)
+        loss = self.criterion(class_output, y)
+        penalty = self.penalty(class_output, y)
+        return loss + self.penalty_weight * penalty
+
+class REx(MLP):
+    def __init__(self, input_dim, hidden_dim, num_labels, variance_weight):
+        super(REx, self).__init__(input_dim, hidden_dim, num_labels)
+        self.variance_weight = variance_weight
+        self.criterion = nn.CrossEntropyLoss(reduction='none')
+
+    def compute_loss(self, data):
+        x, y = data
+        class_output = self.forward(x)
+        loss = self.criterion(class_output, y)
+        loss_mean = torch.mean(loss)
+        loss_var = torch.var(loss)
+        return loss_mean + self.variance_weight * loss_var
+
+# domain adaptation models
 class ReverseLayerF(Function):
     @staticmethod
     def forward(ctx, x, lamda):
@@ -154,7 +189,6 @@ class DANN(nn.Module):
         domain_loss = domain_source_loss + domain_target_loss
         return class_loss, domain_loss
 
-
 class ADDA:
     def __init__(self, input_dim, hidden_dim, num_labels, num_domains, lamda):
         self.input_dim = input_dim
@@ -166,35 +200,39 @@ class ADDA:
 
         self.srcMapper = nn.Sequential(
             nn.Linear(input_dim, 512),
-            nn.ReLU(),
+            nn.ReLU(True),
             nn.Linear(512, 512),
-            nn.ReLU(),
+            nn.ReLU(True),
+            nn.Linear(512, 512),
+            nn.ReLU(True),
             nn.Linear(512, input_dim),
-            nn.ReLU()
         )
 
         self.tgtMapper = nn.Sequential(
             nn.Linear(input_dim, 512),
-            nn.ReLU(),
+            nn.ReLU(True),
             nn.Linear(512, 512),
-            nn.ReLU(),
+            nn.ReLU(True),
+            nn.Linear(512, 512),
+            nn.ReLU(True),
             nn.Linear(512, input_dim),
-            nn.ReLU()
         )
 
         self.Classifier = nn.Sequential(
             nn.Linear(input_dim, 64),
-            nn.ReLU(),
+            nn.ReLU(True),
             nn.Linear(64, 64),
-            nn.ReLU(),
+            nn.ReLU(True),
             nn.Linear(64, num_labels)
         )
 
         self.Discriminator = nn.Sequential(
             nn.Linear(input_dim, 512),
-            nn.ReLU(),
+            nn.ReLU(True),
             nn.Linear(512, 512),
-            nn.ReLU(),
+            nn.ReLU(True),
+            nn.Linear(512, 512),
+            nn.ReLU(True),
             nn.Linear(512, num_domains)
         )
 
@@ -209,9 +247,7 @@ class ADDA:
         loss = self.criterion(src_class, y)
         return loss
 
-    def discriminator_loss(self, src_data, tgt_data):
-        src_x, src_y = src_data
-        tgt_x, tgt_y = tgt_data
+    def discriminator_loss(self, src_x, tgt_x):
         src_mapping = self.srcMapper(src_x)
         tgt_mapping = self.tgtMapper(tgt_x)
         batch_size = src_mapping.size(0)
@@ -229,118 +265,15 @@ class ADDA:
         loss_discriminator = pred_tgt.mean() - pred_src.mean() + self.lamda * gradient_penalty
         return loss_discriminator
 
-    def tgt_loss(self, tgt_data):
-        tgt_x, tgt_y = tgt_data
+    def tgt_loss(self, tgt_x):
         tgt_mapping = self.tgtMapper(tgt_x)
         pred_tgt = self.Discriminator(tgt_mapping)
         loss_tgt = -pred_tgt.mean()
         return loss_tgt
 
-
-class IRM(nn.Module):
-    def __init__(self, input_dim, hidden_dim, num_labels, penalty_weight):
-        super(IRM, self).__init__()
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
-        self.num_labels = num_labels
-        self.penalty_weight = penalty_weight
-        self.criterion = nn.CrossEntropyLoss()
-
-        self.feature_extractor = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU()
-        )
-
-        self.label_classifier = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim//2),
-            nn.ReLU(),
-            nn.Linear(hidden_dim//2, hidden_dim//2),
-            nn.ReLU(),
-            nn.Linear(hidden_dim//2, num_labels)
-        )
-
-    def forward(self, input_data):
-        feature_mapping = self.feature_extractor(input_data)
-        class_output = self.label_classifier(feature_mapping)
-        return class_output
-
-    def penalty(self, logits, y):
-        scale = torch.ones((1, self.num_labels)).to(y.device).requires_grad_()
-        loss = self.criterion(logits * scale, y)
-        grad = autograd.grad(loss, [scale], create_graph=True)[0]
-        return torch.sum(grad ** 2)
-
-    def compute_loss(self, data):
-        x, y = data
-        class_output = self.forward(x)
-        loss = self.criterion(class_output, y)
-        penalty = self.penalty(class_output, y)
-        return loss + self.penalty_weight * penalty
-
-class REx(nn.Module):
-    def __init__(self, input_dim, hidden_dim, num_labels, variance_weight):
-        super(REx, self).__init__()
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
-        self.num_labels = num_labels
-        self.variance_weight = variance_weight
-        self.criterion = nn.CrossEntropyLoss(reduction='none')
-
-        self.feature_extractor = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU()
-        )
-
-        self.label_classifier = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim//2),
-            nn.ReLU(),
-            nn.Linear(hidden_dim//2, hidden_dim//2),
-            nn.ReLU(),
-            nn.Linear(hidden_dim//2, num_labels)
-        )
-
-    def forward(self, input_data):
-        feature_mapping = self.feature_extractor(input_data)
-        class_output = self.label_classifier(feature_mapping)
-        return class_output
-
-    def compute_loss(self, data):
-        x, y = data
-        class_output = self.forward(x)
-        loss = self.criterion(class_output, y)
-        loss_mean = torch.mean(loss)
-        loss_var = torch.var(loss)
-        return loss_mean + self.variance_weight * loss_var
-
-class WGANGen:
-    def __init__(self, noise_dim, input_dim, hidden_dim):
-        self.noise_dim = noise_dim
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
-
-        self.netG = nn.Sequential(
-            nn.Linear(noise_dim, hidden_dim),
-            nn.ReLU(True),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(True),
-            nn.Linear(hidden_dim, input_dim)
-        )
-
-        self.netD = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(True),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(True),
-            nn.Linear(hidden_dim, 1)
-        )
-
-class ASDA(nn.Module):
+class SADA(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_labels, num_domains, lamda, triplet_weight):
-        super(ASDA, self).__init__()
+        super(SADA, self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.num_labels = num_labels
@@ -439,6 +372,29 @@ class ASDA(nn.Module):
                                               imbalance_parameter)
 
         return source_class_loss, (source_domain_loss + target_domain_loss) * self.lamda +  sep_loss * self.triplet_weight
+
+# data augmentation model
+class WGANGen:
+    def __init__(self, noise_dim, input_dim, hidden_dim):
+        self.noise_dim = noise_dim
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+
+        self.netG = nn.Sequential(
+            nn.Linear(noise_dim, hidden_dim),
+            nn.ReLU(True),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(True),
+            nn.Linear(hidden_dim, input_dim)
+        )
+
+        self.netD = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(True),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(True),
+            nn.Linear(hidden_dim, 1)
+        )
 
 
 

@@ -18,7 +18,7 @@ def parse_arguments():
     parser.add_argument("--weight_decay", type=float, default=.0)
     parser.add_argument("--variance_weight", type=float, default=.5)
     parser.add_argument("--wgan_lamda", type=float, default=10.)
-    parser.add_argument("--pretrain_epoch", type=int, default=100)
+    parser.add_argument("--pretrain_epoch", type=int, default=500)
     parser.add_argument("--advtrain_iteration", type=int, default=10000)
     parser.add_argument("--critic_iters", type=int, default=10)
     parser.add_argument("--gen_iters", type=int, default=10000)

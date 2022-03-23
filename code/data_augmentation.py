@@ -66,7 +66,6 @@ def wGAN_augmentation(args, dataset):
                 data_iter = iter(dataloader)
                 real_data, _ = next(data_iter)
             real_data_v = autograd.Variable(real_data).to(device, dtype=torch.float)
-
             wGAN.netD.zero_grad()
 
             # train with real

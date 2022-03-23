@@ -9,7 +9,6 @@ from sklearn.metrics import classification_report, accuracy_score
 from dataset import SeedDataset
 from models import create_model
 from parser import parse_arguments
-from utils import plot_embedding
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 checkpoint_dir = "../checkpoint"
@@ -176,17 +175,19 @@ def train_adaptation(args, train_dataset, test_dataset):
                     torch.save(model.srcMapper.state_dict(), os.path.join(checkpoint_dir, filename))
                     filename = f"{args.model}_Classifier_checkpoint.pt"
                     torch.save(model.Classifier.state_dict(), os.path.join(checkpoint_dir, filename))
-                print(
-                    f"Epoch {epoch}, Loss {total_loss / len(train_loader):.4f}, Acc {test_acc:.4f}, Acc_train {train_acc:.4f}")
+                print(f"Epoch {epoch}, Loss {total_loss / len(train_loader):.4f}, Acc {test_acc:.4f}, Acc_train {train_acc:.4f}")
+                # early stopping
+                if train_acc > 0.99:
+                    break
 
         # adversarial train
         print("start adversarial training:")
+        # initialize tgtMapper to have the same parameter as srcMapper
+        model.tgtMapper.load_state_dict(model.srcMapper.state_dict())
 
         # optimizer of tgtMapper and Discriminator
-        # optimizer_tgt = torch.optim.Adam(model.tgtMapper.parameters(), lr = 1e-5, betas=(0.5,0.9))
-        # optimizer_disc = torch.optim.Adam(model.Discriminator.parameters(), lr = 1e-5, betas=(0.5,0.9))
-        optimizer_tgt = torch.optim.RMSprop(model.tgtMapper.parameters(), lr=1e-5)
-        optimizer_disc = torch.optim.RMSprop(model.Discriminator.parameters(), lr=1e-5)
+        optimizer_tgt = torch.optim.RMSprop(model.tgtMapper.parameters(), lr=args.lr)
+        optimizer_disc = torch.optim.RMSprop(model.Discriminator.parameters(), lr=args.lr)
         train_iter = iter(train_loader)
         test_iter = iter(test_loader)
 
@@ -208,27 +209,27 @@ def train_adaptation(args, train_dataset, test_dataset):
             # train discriminator
             for _ in range(args.critic_iters):
                 try:
-                    src_x, src_y = next(train_iter)
+                    src_x, _ = next(train_iter)
                     if src_x.size(0) < args.batch_size:
                         train_iter = iter(train_loader)
-                        src_x, src_y = next(train_iter)
+                        src_x, _ = next(train_iter)
                 except StopIteration:
                     train_iter = iter(train_loader)
-                    src_x, src_y = next(train_iter)
-                src_x, src_y = src_x.to(device).float(), src_y.to(device)
+                    src_x, _ = next(train_iter)
+                src_x = src_x.to(device).float()
 
                 try:
-                    tgt_x, tgt_y = next(test_iter)
+                    tgt_x, _ = next(test_iter)
                     if tgt_x.size(0) < args.batch_size:
                         test_iter = iter(test_loader)
-                        tgt_x, tgt_y = next(test_iter)
+                        tgt_x, _ = next(test_iter)
                 except StopIteration:
                     test_iter = iter(test_loader)
-                    tgt_x, tgt_y = next(test_iter)
-                tgt_x, tgt_y = tgt_x.to(device).float(), tgt_y.to(device)
+                    tgt_x, _ = next(test_iter)
+                tgt_x = tgt_x.to(device).float()
 
                 optimizer_disc.zero_grad()
-                loss_discriminator = model.discriminator_loss((src_x, src_y), (tgt_x, tgt_y))
+                loss_discriminator = model.discriminator_loss(src_x, tgt_x)
                 loss_discriminator.backward()
                 optimizer_disc.step()
 
@@ -240,7 +241,7 @@ def train_adaptation(args, train_dataset, test_dataset):
 
             optimizer_disc.zero_grad()
             optimizer_tgt.zero_grad()
-            loss_tgt = model.tgt_loss((tgt_x, tgt_y))
+            loss_tgt = model.tgt_loss(tgt_x)
             loss_tgt.backward()
             optimizer_tgt.step()
 
@@ -281,7 +282,7 @@ if __name__ == '__main__':
 
     if args.model == 'SVM':
         train_svm(args, train_dataset, test_dataset)
-    elif args.model == 'DANN' or args.model == 'ASDA':
+    elif args.model == 'DANN' or args.model == 'SADA':
         train_DANN(args, train_dataset, test_dataset)
     elif args.model == 'ADDA':
         train_adaptation(args, train_dataset, test_dataset)
