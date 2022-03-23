@@ -21,6 +21,8 @@ def create_model(args):
         return REx(310, args.hidden_dim, 3, args.variance_weight)
     elif args.model == 'WGANGen':
         return WGANGen(64, 310, 128)
+    elif args.model == 'ADDA':
+        return ADDA(310, args.hidden_dim, 3, 1, 10)
     else:
         raise ValueError("Unknown model type!")
 
@@ -152,8 +154,88 @@ class DANN(nn.Module):
         domain_loss = domain_source_loss + domain_target_loss
         return class_loss, domain_loss
 
-class ADDA(nn.Module):
-    pass
+
+class ADDA:
+    def __init__(self, input_dim, hidden_dim, num_labels, num_domains, lamda):
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.num_labels = num_labels
+        self.num_domains = num_domains
+        self.lamda = lamda
+        self.criterion = nn.CrossEntropyLoss()
+
+        self.srcMapper = nn.Sequential(
+            nn.Linear(input_dim, 512),
+            nn.ReLU(),
+            nn.Linear(512, 512),
+            nn.ReLU(),
+            nn.Linear(512, input_dim),
+            nn.ReLU()
+        )
+
+        self.tgtMapper = nn.Sequential(
+            nn.Linear(input_dim, 512),
+            nn.ReLU(),
+            nn.Linear(512, 512),
+            nn.ReLU(),
+            nn.Linear(512, input_dim),
+            nn.ReLU()
+        )
+
+        self.Classifier = nn.Sequential(
+            nn.Linear(input_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, 64),
+            nn.ReLU(),
+            nn.Linear(64, num_labels)
+        )
+
+        self.Discriminator = nn.Sequential(
+            nn.Linear(input_dim, 512),
+            nn.ReLU(),
+            nn.Linear(512, 512),
+            nn.ReLU(),
+            nn.Linear(512, num_domains)
+        )
+
+    def pretrain_forward(self, input_data):
+        src_mapping = self.srcMapper(input_data)
+        src_class = self.Classifier(src_mapping)
+        return src_class
+
+    def pretrain_loss(self, train_data):
+        x, y = train_data
+        src_class = self.pretrain_forward(x)
+        loss = self.criterion(src_class, y)
+        return loss
+
+    def discriminator_loss(self, src_data, tgt_data):
+        src_x, src_y = src_data
+        tgt_x, tgt_y = tgt_data
+        src_mapping = self.srcMapper(src_x)
+        tgt_mapping = self.tgtMapper(tgt_x)
+        batch_size = src_mapping.size(0)
+        alpha = torch.rand(batch_size, 1).to(src_mapping.device)
+        alpha = alpha.expand(src_mapping.size())
+        interpolates = alpha * src_mapping + (1 - alpha) * tgt_mapping
+        interpolates = autograd.Variable(interpolates, requires_grad=True)
+
+        disc_interpolates = self.Discriminator(interpolates)
+        gradients = autograd.grad(outputs=disc_interpolates, inputs=interpolates,
+                                  grad_outputs=torch.ones(disc_interpolates.size()).to(interpolates.device),
+                                  create_graph=True, retain_graph=True, only_inputs=True)[0]
+        gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+        pred_tgt, pred_src = self.Discriminator(tgt_mapping), self.Discriminator(src_mapping)
+        loss_discriminator = pred_tgt.mean() - pred_src.mean() + self.lamda * gradient_penalty
+        return loss_discriminator
+
+    def tgt_loss(self, tgt_data):
+        tgt_x, tgt_y = tgt_data
+        tgt_mapping = self.tgtMapper(tgt_x)
+        pred_tgt = self.Discriminator(tgt_mapping)
+        loss_tgt = -pred_tgt.mean()
+        return loss_tgt
+
 
 class IRM(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_labels, penalty_weight):
